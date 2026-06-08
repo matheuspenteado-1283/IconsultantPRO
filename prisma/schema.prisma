@@ -1,0 +1,724 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+
+// ========================
+// AUTHENTICATION
+// ========================
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String?
+  role          UserRole  @default(CONSULTANT)
+  organizationId String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  organization      Organization?      @relation(fields: [organizationId], references: [id])
+  accounts          Account[]
+  sessions          Session[]
+  passwordResetTokens PasswordResetToken[]
+  projectParticipants ProjectParticipant[]
+  backlogItems      BacklogItem[]      @relation("BacklogResponsible")
+  createdProposals  Proposal[]         @relation("ProposalCreator")
+  userProfiles      UserProfile[]
+  createdMeetings   Meeting[]          @relation("MeetingCreator")
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
+}
+
+// ========================
+// ORGANIZATION
+// ========================
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  cnpj      String?
+  email     String?
+  phone     String?
+  address   String?
+  logoUrl   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users    User[]
+  projects Project[]
+  partners Partner[]
+  meetings Meeting[]
+
+  @@map("organizations")
+}
+
+// ========================
+// PROJECTS
+// ========================
+
+model Project {
+  id             String        @id @default(cuid())
+  organizationId String
+  name           String
+  code           String?
+  clientId       String?
+  scope          String?
+  description    String?
+  startDate      DateTime?
+  endDate        DateTime?
+  status         ProjectStatus @default(PROSPECTING)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organization  Organization        @relation(fields: [organizationId], references: [id])
+  client        Partner?            @relation(fields: [clientId], references: [id])
+  participants  ProjectParticipant[]
+  systems       SystemEnvironment[]
+  backlogItems  BacklogItem[]
+  proposals     Proposal[]
+  approvers     ProjectApprover[]
+  requester     ProjectRequester[]
+  sponsors      ProjectSponsor[]
+  projectModules ProjectModule[]
+  meetings      Meeting[]
+
+  @@map("projects")
+}
+
+model ProjectParticipant {
+  id        String  @id @default(cuid())
+  projectId String
+  userId    String?
+  name      String
+  role      String
+  email     String?
+  phone     String?
+  notes     String?
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id])
+
+  @@map("project_participants")
+}
+
+model ProjectApprover {
+  id             String         @id @default(cuid())
+  projectId      String
+  partnerId      String?
+  name           String
+  email          String
+  approvalStatus ApprovalStatus @default(PENDING)
+  approvalToken  String?        @unique
+  approvedAt     DateTime?
+  comments       String?
+  createdAt      DateTime       @default(now())
+
+  project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  partner Partner? @relation(fields: [partnerId], references: [id])
+
+  @@map("project_approvers")
+}
+
+model ProjectRequester {
+  id        String  @id @default(cuid())
+  projectId String
+  partnerId String?
+  name      String
+  role      String?
+  email     String?
+  phone     String?
+  notes     String?
+  createdAt DateTime @default(now())
+
+  project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  partner Partner? @relation(fields: [partnerId], references: [id])
+
+  @@map("project_requesters")
+}
+
+model ProjectSponsor {
+  id           String  @id @default(cuid())
+  projectId    String
+  partnerId    String?
+  name         String
+  role         String?
+  company      String?
+  email        String?
+  phone        String?
+  authorityLevel String?
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  partner Partner? @relation(fields: [partnerId], references: [id])
+
+  @@map("project_sponsors")
+}
+
+model ProjectModule {
+  id        String   @id @default(cuid())
+  projectId String
+  moduleId  String
+  createdAt DateTime @default(now())
+
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sapModule SapModule @relation(fields: [moduleId], references: [id])
+
+  @@unique([projectId, moduleId])
+  @@map("project_modules")
+}
+
+// ========================
+// SYSTEMS / ENVIRONMENTS
+// ========================
+
+model SystemEnvironment {
+  id          String      @id @default(cuid())
+  projectId   String
+  name        String
+  systemId    String?
+  environment Environment @default(DEV)
+  version     String?
+  description String?
+  notes       String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("system_environments")
+}
+
+// ========================
+// BACKLOG
+// ========================
+
+model BacklogItem {
+  id             String       @id @default(cuid())
+  projectId      String
+  backlogCode    String
+  description    String
+  responsibleId  String?
+  type           BacklogType
+  priority       Priority     @default(MEDIUM)
+  category       BacklogCategory
+  moduleId       String?
+  status         BacklogStatus @default(OPEN)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  project     Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  responsible User?             @relation("BacklogResponsible", fields: [responsibleId], references: [id])
+  sapModule   SapModule?        @relation(fields: [moduleId], references: [id])
+  implementation Implementation?
+  improvement   Improvement?
+  effortEstimates EffortEstimate[]
+  proposalItems ProposalItem[]
+
+  @@map("backlog_items")
+}
+
+model Implementation {
+  id              String  @id @default(cuid())
+  backlogItemId   String  @unique
+  phase           String?
+  technicalObject String?
+  estimatedHours  Float?
+  acceptanceCriteria String?
+  risks           String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  backlogItem BacklogItem @relation(fields: [backlogItemId], references: [id], onDelete: Cascade)
+
+  @@map("implementations")
+}
+
+model Improvement {
+  id                String  @id @default(cuid())
+  backlogItemId     String  @unique
+  currentSituation  String?
+  desiredSituation  String?
+  businessJustification String?
+  operationalImpact String?
+  expectedBenefits  String?
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  backlogItem BacklogItem @relation(fields: [backlogItemId], references: [id], onDelete: Cascade)
+
+  @@map("improvements")
+}
+
+// ========================
+// PARTNERS
+// ========================
+
+model Partner {
+  id             String      @id @default(cuid())
+  organizationId String
+  name           String
+  cnpj           String?
+  email          String?
+  phone          String?
+  address        String?
+  segment        String?
+  partnerType    PartnerType
+  contactPerson  String?
+  notes          String?
+  active         Boolean     @default(true)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  organization      Organization        @relation(fields: [organizationId], references: [id])
+  projects          Project[]
+  approvers         ProjectApprover[]
+  requesters        ProjectRequester[]
+  sponsors          ProjectSponsor[]
+
+  @@map("partners")
+}
+
+// ========================
+// SAP MODULES
+// ========================
+
+model SapModule {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  functionalEfforts FunctionalEffort[]
+  backlogItems      BacklogItem[]
+  projectModules    ProjectModule[]
+
+  @@map("sap_modules")
+}
+
+// ========================
+// EFFORT TABLES
+// ========================
+
+model AbapEffort {
+  id                String      @id @default(cuid())
+  type              AbapType
+  complexity        Complexity
+  standardHours     Float
+  description       String?
+  active            Boolean     @default(true)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@unique([type, complexity])
+  @@map("abap_efforts")
+}
+
+model FunctionalEffort {
+  id           String     @id @default(cuid())
+  moduleId     String
+  activityType String
+  complexity   Complexity
+  standardHours Float
+  description  String?
+  active       Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  sapModule SapModule @relation(fields: [moduleId], references: [id])
+
+  @@map("functional_efforts")
+}
+
+model EffortEstimate {
+  id            String       @id @default(cuid())
+  backlogItemId String
+  estimateType  EstimateType
+  complexity    Complexity?
+  hours         Float
+  notes         String?
+  createdAt     DateTime     @default(now())
+
+  backlogItem BacklogItem @relation(fields: [backlogItemId], references: [id], onDelete: Cascade)
+
+  @@map("effort_estimates")
+}
+
+// ========================
+// PRICE TABLES
+// ========================
+
+model ProfessionalPrice {
+  id         String   @id @default(cuid())
+  profile    String
+  dailyRate  Float
+  hourlyRate Float
+  currency   String   @default("BRL")
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("professional_prices")
+}
+
+model DevelopmentPrice {
+  id          String     @id @default(cuid())
+  type        AbapType
+  complexity  Complexity
+  unitPrice   Float
+  currency    String     @default("BRL")
+  description String?
+  active      Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@unique([type, complexity])
+  @@map("development_prices")
+}
+
+// ========================
+// PROPOSALS
+// ========================
+
+model Proposal {
+  id             String         @id @default(cuid())
+  projectId      String
+  createdById    String
+  title          String
+  totalEffort    Float          @default(0)
+  totalPrice     Float          @default(0)
+  contingency    Float          @default(0)
+  discount       Float          @default(0)
+  finalPrice     Float          @default(0)
+  status         ProposalStatus @default(DRAFT)
+  notes          String?
+  validUntil     DateTime?
+  generatedPdfUrl String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  project   Project        @relation(fields: [projectId], references: [id])
+  createdBy User           @relation("ProposalCreator", fields: [createdById], references: [id])
+  items     ProposalItem[]
+
+  @@map("proposals")
+}
+
+model ProposalItem {
+  id           String  @id @default(cuid())
+  proposalId   String
+  backlogItemId String
+  description  String?
+  effortHours  Float   @default(0)
+  unitPrice    Float   @default(0)
+  totalPrice   Float   @default(0)
+  notes        String?
+
+  proposal    Proposal    @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  backlogItem BacklogItem @relation(fields: [backlogItemId], references: [id])
+
+  @@map("proposal_items")
+}
+
+// ========================
+// ENUMS
+// ========================
+
+enum UserRole {
+  ADMIN
+  CONSULTANT
+  VIEWER
+}
+
+enum ProjectStatus {
+  PROSPECTING
+  IN_PROGRESS
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum Environment {
+  DEV
+  QAS
+  PRD
+  SBX
+  SANDBOX
+}
+
+enum BacklogType {
+  CONFIGURATION
+  WRICEF
+  CONSULTING
+  TRAINING
+  GUIDANCE
+}
+
+enum Priority {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum BacklogCategory {
+  IMPLEMENTATION
+  IMPROVEMENT
+}
+
+enum BacklogStatus {
+  OPEN
+  IN_PROGRESS
+  REVIEW
+  DONE
+  CANCELLED
+}
+
+enum PartnerType {
+  CLIENT
+  SUPPLIER
+  BUSINESS_PARTNER
+  PROSPECT
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum Complexity {
+  SIMPLE
+  MEDIUM
+  COMPLEX
+  VERY_COMPLEX
+}
+
+enum AbapType {
+  REPORT
+  INTERFACE
+  CONVERSION
+  ENHANCEMENT
+  FORM
+  WORKFLOW
+  BADI
+  USER_EXIT
+  SMARTFORM
+  ADOBE_FORM
+}
+
+enum EstimateType {
+  ABAP
+  FUNCTIONAL
+  CONSULTING
+  TRAINING
+  MANAGEMENT
+}
+
+enum ProposalStatus {
+  DRAFT
+  SENT
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+// ========================
+// ACCESS CONTROL SYSTEM
+// ========================
+
+model Profile {
+  id            String           @id @default(cuid())
+  name          String           @unique // ADM_SIST, MANAGER, CONSULTANT, BP_KEY_USER, BP_SPONSOR
+  description   String?
+  userProfiles  UserProfile[]
+  modules       ProfileModule[]
+  allowedEmails AllowedEmail[]
+
+  @@map("profiles")
+}
+
+model UserProfile {
+  id        String   @id @default(cuid())
+  userId    String
+  profileId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, profileId])
+  @@map("user_profiles")
+}
+
+model ProfileModule {
+  id        String   @id @default(cuid())
+  profileId String
+  moduleKey String // e.g., 'dashboard', 'projects', 'backlog', 'approvals', 'systems', 'estimates', 'proposals', 'jobseeker', 'settings_partners', 'settings_modules', 'settings_effort', 'settings_prices', 'access'
+  createdAt DateTime @default(now())
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, moduleKey])
+  @@map("profile_modules")
+}
+
+model AllowedEmail {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  profileId String
+  createdAt DateTime @default(now())
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("allowed_emails")
+}
+
+// ========================
+// MEETINGS
+// ========================
+
+model Meeting {
+  id              String          @id @default(cuid())
+  organizationId  String
+  projectId       String?
+  title           String
+  platform        MeetingPlatform @default(OTHER)
+  meetingDate     DateTime        @default(now())
+  durationSeconds Int?
+  participants    String[]
+  status          MeetingStatus   @default(PENDING)
+  createdById     String
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  organization  Organization          @relation(fields: [organizationId], references: [id])
+  project       Project?              @relation(fields: [projectId], references: [id])
+  createdBy     User                  @relation("MeetingCreator", fields: [createdById], references: [id])
+  transcription MeetingTranscription?
+  summary       MeetingSummary?
+  actionItems   MeetingActionItem[]
+
+  @@map("meetings")
+}
+
+model MeetingTranscription {
+  id        String   @id @default(cuid())
+  meetingId String   @unique
+  fullText  String
+  language  String?
+  source    String?
+  createdAt DateTime @default(now())
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@map("meeting_transcriptions")
+}
+
+model MeetingSummary {
+  id         String   @id @default(cuid())
+  meetingId  String   @unique
+  summary    String
+  keyPoints  String[]
+  decisions  String[]
+  nextSteps  String[]
+  sentiment  String?
+  createdAt  DateTime @default(now())
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@map("meeting_summaries")
+}
+
+model MeetingActionItem {
+  id          String           @id @default(cuid())
+  meetingId   String
+  description String
+  responsible String?
+  dueDate     DateTime?
+  status      ActionItemStatus @default(OPEN)
+  createdAt   DateTime         @default(now())
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@map("meeting_action_items")
+}
+
+enum MeetingPlatform {
+  TEAMS
+  GOOGLE_MEET
+  ZOOM
+  WEBEX
+  OTHER
+}
+
+enum MeetingStatus {
+  PENDING
+  RECORDING
+  PROCESSING
+  COMPLETED
+  ERROR
+}
+
+enum ActionItemStatus {
+  OPEN
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
