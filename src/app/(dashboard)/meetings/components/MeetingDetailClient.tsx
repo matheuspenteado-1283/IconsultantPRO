@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { updateActionItemStatus, deleteMeeting } from '../actions'
+import { updateActionItemStatus, deleteMeeting, syncVexaMeeting, stopVexaMeeting } from '../actions'
 
 interface MeetingDetailClientProps {
   meeting: {
@@ -14,6 +14,9 @@ interface MeetingDetailClientProps {
     participants: string[]
     status: string
     project: { id: string; name: string } | null
+    vexaBotId?: string | null
+    vexaMeetingUrl?: string | null
+    vexaMeetingId?: string | null
     transcription: { fullText: string; source: string | null; language: string | null } | null
     summary: {
       summary: string
@@ -90,7 +93,44 @@ export function MeetingDetailClient({ meeting }: MeetingDetailClientProps) {
   const [copiedTranscript, setCopiedTranscript] = useState(false)
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(null)
   const [localActionItems, setLocalActionItems] = useState(meeting.actionItems)
+  const [syncing, setSyncing] = useState(false)
+  const [syncError, setSyncError] = useState<string | null>(null)
   const transcriptRef = useRef<HTMLDivElement>(null)
+
+  const handleSyncVexa = async () => {
+    setSyncing(true)
+    setSyncError(null)
+    try {
+      const res = await syncVexaMeeting(meeting.id)
+      if (res.error) {
+        setSyncError(res.error)
+      } else {
+        router.refresh()
+      }
+    } catch (err: any) {
+      setSyncError(err.message || 'Erro ao sincronizar')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  const handleStopVexa = async () => {
+    if (!confirm('Deseja realmente encerrar a gravação do Bot do Vexa e gerar o resumo?')) return
+    setSyncing(true)
+    setSyncError(null)
+    try {
+      const res = await stopVexaMeeting(meeting.id)
+      if (res.error) {
+        setSyncError(res.error)
+      } else {
+        router.refresh()
+      }
+    } catch (err: any) {
+      setSyncError(err.message || 'Erro ao parar bot')
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   const handleActionStatusChange = async (id: string, newStatus: string) => {
     setUpdatingItemId(id)
@@ -198,7 +238,7 @@ export function MeetingDetailClient({ meeting }: MeetingDetailClientProps) {
       {/* === SUMMARY TAB === */}
       {activeTab === 'summary' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          {meeting.status !== 'COMPLETED' && meeting.status !== 'ERROR' && (
+          {meeting.status !== 'COMPLETED' && meeting.status !== 'ERROR' && !meeting.vexaMeetingId && (
             <div className="card" style={{ textAlign: 'center', padding: '32px' }}>
               <div style={{
                 display: 'inline-block', width: '40px', height: '40px',
@@ -206,6 +246,72 @@ export function MeetingDetailClient({ meeting }: MeetingDetailClientProps) {
                 borderRadius: '50%', animation: 'spin 0.8s linear infinite', marginBottom: '12px',
               }} />
               <p style={{ color: 'var(--color-text-muted)', margin: 0 }}>Processando reunião... Aguarde.</p>
+            </div>
+          )}
+
+          {meeting.vexaMeetingId && (meeting.status === 'RECORDING' || meeting.status === 'PROCESSING' || meeting.status === 'PENDING') && (
+            <div className="card" style={{
+              background: 'rgba(16,185,129,0.04)',
+              border: '1px solid rgba(16,185,129,0.2)',
+              borderRadius: '12px',
+              padding: '24px',
+              textAlign: 'center',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '16px',
+              marginBottom: '20px'
+            }}>
+              <div style={{ fontSize: '48px', animation: meeting.status === 'RECORDING' ? 'pulse-text 1.5s infinite' : 'none' }}>
+                🤖
+              </div>
+              <div>
+                <h3 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 6px', color: 'var(--color-text-primary)' }}>
+                  {meeting.status === 'RECORDING' && 'Agente Vexa está Gravando a Reunião'}
+                  {meeting.status === 'PROCESSING' && 'Agente Vexa Processando Resumo...'}
+                  {meeting.status === 'PENDING' && 'Agente Vexa Aguardando Início...'}
+                </h3>
+                <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', margin: 0, maxWidth: '500px' }}>
+                  O Bot do Vexa está conectado à chamada. Você pode acompanhar a gravação, obter transcrições parciais ou parar a gravação para gerar o resumo completo.
+                </p>
+                {meeting.vexaMeetingUrl && (
+                  <p style={{ fontSize: '13px', marginTop: '8px', margin: 0 }}>
+                    🔗 Link da reunião: <a href={meeting.vexaMeetingUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#60a5fa', textDecoration: 'underline' }}>{meeting.vexaMeetingUrl}</a>
+                  </p>
+                )}
+              </div>
+
+              {syncError && (
+                <p style={{ fontSize: '13px', color: '#ef4444', margin: 0 }}>
+                  ⚠️ {syncError}
+                </p>
+              )}
+
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                <button
+                  className="btn-secondary"
+                  onClick={handleSyncVexa}
+                  disabled={syncing}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  {syncing ? '⟳ Sincronizando...' : '🔄 Sincronizar Transcrição'}
+                </button>
+                {meeting.status === 'RECORDING' && (
+                  <button
+                    className="btn-primary"
+                    onClick={handleStopVexa}
+                    disabled={syncing}
+                    style={{
+                      background: 'linear-gradient(135deg, #dc2626, #991b1b)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    ⏹ Encerrar e Resumir
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
@@ -466,6 +572,7 @@ export function MeetingDetailClient({ meeting }: MeetingDetailClientProps) {
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pulse-text { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(1.1); } }
       `}</style>
     </div>
   )

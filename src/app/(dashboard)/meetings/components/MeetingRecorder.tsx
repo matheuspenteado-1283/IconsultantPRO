@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { createMeeting, updateMeetingDuration } from '../actions'
+import { createMeeting, updateMeetingDuration, startVexaMeeting } from '../actions'
 
 type RecorderState =
   | 'idle'
@@ -44,6 +44,8 @@ export function MeetingRecorder({ projects, onClose, onComplete }: MeetingRecord
   const [errorMsg, setErrorMsg] = useState('')
   const [processingStep, setProcessingStep] = useState('Transcrevendo...')
   const [waveformData, setWaveformData] = useState<number[]>(Array(32).fill(5))
+  const [mode, setMode] = useState<'local' | 'vexa'>('vexa')
+  const [meetingUrl, setMeetingUrl] = useState('')
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
@@ -59,10 +61,23 @@ export function MeetingRecorder({ projects, onClose, onComplete }: MeetingRecord
 
   const stopStreams = useCallback(() => {
     displayStreamRef.current?.getTracks().forEach(t => t.stop())
+    displayStreamRef.current = null
     micStreamRef.current?.getTracks().forEach(t => t.stop())
-    audioCtxRef.current?.close()
-    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current)
-    if (timerRef.current) clearInterval(timerRef.current)
+    micStreamRef.current = null
+    if (audioCtxRef.current) {
+      if (audioCtxRef.current.state !== 'closed') {
+        audioCtxRef.current.close().catch(() => {})
+      }
+      audioCtxRef.current = null
+    }
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current)
+      animFrameRef.current = 0
+    }
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
+    }
   }, [])
 
   useEffect(() => {
@@ -185,6 +200,40 @@ export function MeetingRecorder({ projects, onClose, onComplete }: MeetingRecord
     }
   }
 
+  const handleStartVexa = async () => {
+    if (!title.trim()) {
+      alert('Informe o título da reunião.')
+      return
+    }
+    if (!meetingUrl.trim()) {
+      alert('Informe o link da reunião (Google Meet, Zoom ou MS Teams).')
+      return
+    }
+
+    setState('processing')
+    setProcessingStep('Despachando Bot de IA do Vexa para a reunião...')
+
+    try {
+      const result = await startVexaMeeting({
+        title,
+        meetingUrl,
+        projectId: projectId || undefined,
+        participants
+      })
+
+      if (result.error) {
+        setErrorMsg(result.error)
+        setState('error')
+      } else if (result.meetingId) {
+        setCompletedId(result.meetingId)
+        setState('done')
+      }
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Erro ao despachar bot')
+      setState('error')
+    }
+  }
+
   const handleStop = async () => {
     if (!mediaRecorderRef.current) return
 
@@ -291,6 +340,51 @@ export function MeetingRecorder({ projects, onClose, onComplete }: MeetingRecord
         {/* SETUP STATE */}
         {state === 'setup' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* Tabs Selector for local vs vexa bot */}
+            <div style={{
+              display: 'flex',
+              gap: '4px',
+              borderBottom: '1px solid var(--color-border)',
+              marginBottom: '4px',
+            }}>
+              <button
+                type="button"
+                onClick={() => setMode('local')}
+                style={{
+                  flex: 1,
+                  padding: '10px',
+                  fontSize: '13px',
+                  fontWeight: mode === 'local' ? 700 : 500,
+                  color: mode === 'local' ? '#60a5fa' : 'var(--color-text-secondary)',
+                  background: 'none',
+                  border: 'none',
+                  borderBottom: mode === 'local' ? '2px solid #60a5fa' : '2px solid transparent',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                🎙️ Gravação Local
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode('vexa')}
+                style={{
+                  flex: 1,
+                  padding: '10px',
+                  fontSize: '13px',
+                  fontWeight: mode === 'vexa' ? 700 : 500,
+                  color: mode === 'vexa' ? '#60a5fa' : 'var(--color-text-secondary)',
+                  background: 'none',
+                  border: 'none',
+                  borderBottom: mode === 'vexa' ? '2px solid #60a5fa' : '2px solid transparent',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                🤖 Agente Vexa (Bot)
+              </button>
+            </div>
+
             <div>
               <label className="input-label">Título da Reunião *</label>
               <input
@@ -300,18 +394,32 @@ export function MeetingRecorder({ projects, onClose, onComplete }: MeetingRecord
                 onChange={e => setTitle(e.target.value)}
               />
             </div>
-            <div>
-              <label className="input-label">Plataforma</label>
-              <select
-                className="input"
-                value={platform}
-                onChange={e => setPlatform(e.target.value)}
-              >
-                {PLATFORMS.map(p => (
-                  <option key={p.value} value={p.value}>{p.label}</option>
-                ))}
-              </select>
-            </div>
+            
+            {mode === 'local' ? (
+              <div>
+                <label className="input-label">Plataforma</label>
+                <select
+                  className="input"
+                  value={platform}
+                  onChange={e => setPlatform(e.target.value)}
+                >
+                  {PLATFORMS.map(p => (
+                    <option key={p.value} value={p.value}>{p.label}</option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div>
+                <label className="input-label">Link da Reunião (Google Meet, Zoom ou Teams) *</label>
+                <input
+                  className="input"
+                  placeholder="https://meet.google.com/abc-defg-hij ou link do Zoom/Teams"
+                  value={meetingUrl}
+                  onChange={e => setMeetingUrl(e.target.value)}
+                />
+              </div>
+            )}
+
             <div>
               <label className="input-label">Projeto (opcional)</label>
               <select
@@ -335,27 +443,56 @@ export function MeetingRecorder({ projects, onClose, onComplete }: MeetingRecord
               />
             </div>
 
-            <div
-              style={{
-                background: 'rgba(59,130,246,0.08)',
-                border: '1px solid rgba(59,130,246,0.2)',
-                borderRadius: '8px',
-                padding: '12px 16px',
-                fontSize: '13px',
-                color: 'var(--color-text-secondary)',
-                lineHeight: '1.5',
-              }}
-            >
-              💡 <strong>Como funciona:</strong> O navegador irá solicitar permissão para capturar o áudio da tela (para som do sistema) e do microfone. A transcrição é gerada automaticamente com IA.
-            </div>
+            {mode === 'local' ? (
+              <div
+                style={{
+                  background: 'rgba(59,130,246,0.08)',
+                  border: '1px solid rgba(59,130,246,0.2)',
+                  borderRadius: '8px',
+                  padding: '12px 16px',
+                  fontSize: '13px',
+                  color: 'var(--color-text-secondary)',
+                  lineHeight: '1.5',
+                }}
+              >
+                💡 <strong>Como funciona:</strong> O navegador irá solicitar permissão para capturar o áudio da tela (para som do sistema) e do microfone. A transcrição é gerada automaticamente com IA.
+              </div>
+            ) : (
+              <div
+                style={{
+                  background: 'rgba(16,185,129,0.08)',
+                  border: '1px solid rgba(16,185,129,0.2)',
+                  borderRadius: '8px',
+                  padding: '12px 16px',
+                  fontSize: '13px',
+                  color: 'var(--color-text-secondary)',
+                  lineHeight: '1.5',
+                }}
+              >
+                🤖 <strong>Como funciona:</strong> O assistente de reuniões do Vexa entrará na chamada como participante secundário para gravar e transcrever a reunião diretamente da plataforma (Google Meet, Teams ou Zoom). Você não precisa manter esta aba aberta.
+              </div>
+            )}
 
             <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
               <button className="btn-ghost" onClick={onClose} style={{ flex: 1 }}>
                 Cancelar
               </button>
-              <button className="btn-primary" onClick={handleStart} style={{ flex: 2 }}>
-                🎙️ Iniciar Gravação
-              </button>
+              {mode === 'local' ? (
+                <button className="btn-primary" onClick={handleStart} style={{ flex: 2 }}>
+                  🎙️ Iniciar Gravação
+                </button>
+              ) : (
+                <button
+                  className="btn-primary"
+                  onClick={handleStartVexa}
+                  style={{
+                    flex: 2,
+                    background: 'linear-gradient(135deg, var(--color-primary, #3b82f6), #10b981)',
+                  }}
+                >
+                  🤖 Despachar Agente Vexa
+                </button>
+              )}
             </div>
           </div>
         )}
