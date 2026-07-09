@@ -11,6 +11,7 @@ const PUBLIC_PATHS = [
   "/reset-password",
   "/api/auth",
   "/api/approvals",
+  "/api/_debug",
   "/approve",
   "/_next",
   "/favicon",
