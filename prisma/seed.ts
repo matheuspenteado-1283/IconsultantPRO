@@ -269,6 +269,32 @@ async function main() {
         linkedUsers++
       }
     }
+
+    // Ensure agent tokens exist for user
+    if (user.organizationId) {
+      const tokenTypes = ["CLAUDE", "WHISPER", "VEXA", "EMAIL"] as const
+      const defaultAllocations: Record<string, number> = { CLAUDE: 1000, WHISPER: 500, VEXA: 500, EMAIL: 200 }
+      let tokensSeeded = 0
+      for (const tt of tokenTypes) {
+        const existingToken = await prisma.agentToken.findUnique({
+          where: { userId_tokenType: { userId: user.id, tokenType: tt } },
+        })
+        if (!existingToken) {
+          await prisma.agentToken.create({
+            data: {
+              userId: user.id,
+              organizationId: user.organizationId,
+              tokenType: tt,
+              totalAllocated: defaultAllocations[tt],
+            },
+          })
+          tokensSeeded++
+        }
+      }
+      if (tokensSeeded > 0) {
+        console.log(`  ✓ ${tokensSeeded} tokens criados para ${user.email}`)
+      }
+    }
   }
   console.log(`  ✓ ${linkedUsers} usuários existentes vinculados a perfis padrão`)
 

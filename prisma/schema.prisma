@@ -20,6 +20,7 @@ model User {
   passwordHash  String?
   role          UserRole  @default(CONSULTANT)
   organizationId String?
+  enabled       Boolean   @default(true)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -32,6 +33,8 @@ model User {
   createdProposals  Proposal[]         @relation("ProposalCreator")
   userProfiles      UserProfile[]
   createdMeetings   Meeting[]          @relation("MeetingCreator")
+  accessLogs        AccessLog[]
+  agentTokens       AgentToken[]
 
   @@map("users")
 }
@@ -99,6 +102,7 @@ model Organization {
   projects Project[]
   partners Partner[]
   meetings Meeting[]
+  agentTokens AgentToken[]
 
   @@map("organizations")
 }
@@ -647,6 +651,9 @@ model Meeting {
   createdById     String
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
+  vexaBotId       String?
+  vexaMeetingUrl  String?
+  vexaMeetingId   String?
 
   organization  Organization          @relation(fields: [organizationId], references: [id])
   project       Project?              @relation(fields: [projectId], references: [id])
@@ -721,4 +728,87 @@ enum ActionItemStatus {
   IN_PROGRESS
   DONE
   CANCELLED
+}
+
+// ========================
+// ACCESS LOGS & USER CONTROL
+// ========================
+
+model AccessLog {
+  id        String       @id @default(cuid())
+  userId    String
+  email     String
+  path      String
+  action    AccessAction
+  ipAddress String?
+  userAgent String?
+  metadata  Json?
+  createdAt DateTime     @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+  @@map("access_logs")
+}
+
+model AgentToken {
+  id             String    @id @default(cuid())
+  userId         String
+  organizationId String?
+  tokenType      TokenType
+  totalAllocated Int       @default(0)
+  consumed       Int       @default(0)
+  lastRenewedAt  DateTime?
+  expiresAt      DateTime?
+  autoRenew      Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user             User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization     Organization?         @relation(fields: [organizationId], references: [id])
+  renewalRequests  TokenRenewalRequest[]
+
+  @@unique([userId, tokenType])
+  @@map("agent_tokens")
+}
+
+model TokenRenewalRequest {
+  id          String         @id @default(cuid())
+  tokenId     String
+  requestedBy String
+  requestedAt DateTime       @default(now())
+  amount      Int
+  status      RenewalStatus  @default(PENDING)
+  resolvedBy  String?
+  resolvedAt  DateTime?
+  notes       String?
+
+  token AgentToken @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+
+  @@index([tokenId, status])
+  @@map("token_renewal_requests")
+}
+
+enum AccessAction {
+  LOGIN
+  LOGOUT
+  PAGE_VIEW
+  API_CALL
+  FILE_DOWNLOAD
+  EXPORT
+  TOKEN_CONSUMPTION
+}
+
+enum TokenType {
+  CLAUDE
+  WHISPER
+  VEXA
+  EMAIL
+}
+
+enum RenewalStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
