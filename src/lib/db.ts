@@ -7,17 +7,11 @@ const globalForPrisma = globalThis as unknown as {
 }
 
 function createPrismaClient() {
-  const connectionString = process.env.DATABASE_URL
-
-  if (!connectionString) {
-    // During build time or when no DB is configured, return a minimal client
-    // that won't crash the build
-    return new PrismaClient({
-      log: ["error"],
-    })
-  }
-
-  const pool = new pg.Pool({ connectionString })
+  // Prisma 7's "client" engine has no embedded query engine binary — it always
+  // requires a driver adapter, even when DATABASE_URL is undefined at module
+  // load time (e.g. build-time page data collection). pg.Pool doesn't
+  // validate the connection string eagerly, so this stays build-safe.
+  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL })
   const adapter = new PrismaPg(pool)
 
   return new PrismaClient({
