@@ -3,6 +3,8 @@ import { redirect } from "next/navigation"
 import { Sidebar } from "@/components/layout/Sidebar"
 import { getUserAllowedModules } from "@/lib/access"
 import { db } from "@/lib/db"
+import { MeetingAlertNotifier } from "@/components/layout/MeetingAlertNotifier"
+import { logAccess } from "@/lib/access-log"
 
 export default async function DashboardLayout({
   children,
@@ -17,6 +19,15 @@ export default async function DashboardLayout({
 
   const userId = session.user?.id || ""
   const userEmail = session.user?.email || undefined
+
+  if (userId) {
+    logAccess({
+      userId,
+      email: userEmail || "",
+      path: "/dashboard",
+      action: "PAGE_VIEW",
+    })
+  }
 
   let allowedModules = await getUserAllowedModules(userId, userEmail)
 
@@ -59,6 +70,7 @@ export default async function DashboardLayout({
           {children}
         </div>
       </main>
+      <MeetingAlertNotifier />
     </div>
   )
 }

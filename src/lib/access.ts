@@ -114,10 +114,12 @@ export async function getUserAllowedModules(userId: string, email?: string): Pro
 export function isModuleAllowed(userModules: string[], moduleKey: string): boolean {
   if (userModules.includes("all")) return true
   
-  // Specific checks for sub-modules/sub-settings
   if (moduleKey.startsWith("settings_")) {
-    // If user has general "settings" or specific sub-settings
     return userModules.includes("settings") || userModules.includes(moduleKey)
+  }
+  
+  if (moduleKey.startsWith("admin_")) {
+    return userModules.includes("access") || userModules.includes(moduleKey)
   }
   
   return userModules.includes(moduleKey)

@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs"
 import { z } from "zod"
 import { db } from "@/lib/db"
 import { authConfig } from "./auth.config"
+import { logAccess } from "@/lib/access-log"
 
 // This file runs ONLY on Node.js (never on Edge).
 // It extends authConfig with the database-dependent providers.
@@ -30,8 +31,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const user = await db.user.findUnique({ where: { email } })
         if (!user || !user.passwordHash) return null
 
+        if (!user.enabled) {
+          throw new Error("ACCOUNT_DISABLED")
+        }
+
         const passwordsMatch = await bcrypt.compare(password, user.passwordHash)
         if (!passwordsMatch) return null
+
+        await logAccess({
+          userId: user.id,
+          email: user.email,
+          path: "/login",
+          action: "LOGIN",
+        })
 
         return {
           id: user.id,

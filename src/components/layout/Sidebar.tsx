@@ -29,6 +29,9 @@ const navItems: NavItem[] = [
   { href: "/settings/effort", icon: "📊", label: "Tabela de Esforço", group: "Cadastros" },
   { href: "/settings/prices", icon: "💰", label: "Tabela de Preços", group: "Cadastros" },
   { href: "/access", icon: "🔐", label: "Gestão de Acessos", group: "Configurações" },
+  { href: "/admin/users", icon: "👥", label: "Usuários", group: "Administração" },
+  { href: "/admin/logs", icon: "📝", label: "Log de Acessos", group: "Administração" },
+  { href: "/admin/tokens", icon: "🎫", label: "Tokens de Agentes", group: "Administração" },
 ]
 
 interface SidebarProps {
@@ -52,6 +55,9 @@ function getModuleKeyFromHref(href: string): string {
   if (href === "/settings/effort") return "settings_effort"
   if (href === "/settings/prices") return "settings_prices"
   if (href === "/access") return "access"
+  if (href === "/admin/users") return "admin_users"
+  if (href === "/admin/logs") return "admin_logs"
+  if (href === "/admin/tokens") return "admin_tokens"
   return ""
 }
 
@@ -68,6 +74,9 @@ export function Sidebar({ session, allowedModules }: SidebarProps) {
     
     // Check specific or general settings permission
     if (key.startsWith("settings_") && userModules.includes("settings")) {
+      return true
+    }
+    if (key.startsWith("admin_") && userModules.includes("access")) {
       return true
     }
     if (key === "estimates_effort" && userModules.includes("estimates")) {

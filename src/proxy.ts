@@ -22,10 +22,8 @@ export async function proxy(request: NextRequest) {
   try {
     const { pathname } = request.nextUrl
 
-    // Allow static files, error pages, public paths, and files with extensions
     if (
       PUBLIC_PATHS.some((p) => pathname.startsWith(p)) ||
-      pathname.includes(".") ||
       pathname === "/500" ||
       pathname === "/404"
     ) {
@@ -49,9 +47,10 @@ export async function proxy(request: NextRequest) {
 
     return NextResponse.next()
   } catch (error) {
-    console.error("Proxy error caught to prevent infinite redirect loop:", error)
-    // On error, let Next.js handle it naturally (avoid redirect loop)
-    return NextResponse.next()
+    console.error("Proxy auth error:", error)
+    const loginUrl = new URL("/login", request.url)
+    loginUrl.searchParams.set("callbackUrl", request.nextUrl.pathname)
+    return NextResponse.redirect(loginUrl)
   }
 }
 

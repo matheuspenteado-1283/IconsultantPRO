@@ -2,8 +2,14 @@
 
 import { db } from "@/lib/db"
 import { revalidatePath } from "next/cache"
+import { checkServerActionRateLimit } from "@/lib/rate-limit"
 
 export async function submitApproval(token: string, decision: "approve" | "reject", comments: string) {
+  const rateLimit = checkServerActionRateLimit({ windowMs: 60_000, maxRequests: 5, key: "rate-limit:approve" })
+  if (!rateLimit.allowed) {
+    return { error: "Muitas tentativas. Tente novamente em breve." }
+  }
+
   if (!token) {
     return { error: "Token de aprovação inválido." }
   }
