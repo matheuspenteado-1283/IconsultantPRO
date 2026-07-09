@@ -1,6 +1,16 @@
 import { Resend } from "resend"
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+let resendClient: Resend | undefined
+
+// Lazy singleton: the Resend constructor throws if RESEND_API_KEY is missing,
+// which would crash module evaluation (and Next.js build-time page data
+// collection) if instantiated eagerly at module scope.
+function getResend() {
+  if (!resendClient) {
+    resendClient = new Resend(process.env.RESEND_API_KEY)
+  }
+  return resendClient
+}
 
 const FROM = process.env.EMAIL_FROM || "noreply@iconsultantpro.com"
 const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "Iconsultant Pro"
@@ -9,7 +19,7 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
 export async function sendPasswordResetEmail(email: string, token: string, name?: string) {
   const resetUrl = `${APP_URL}/reset-password?token=${token}`
 
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM,
     to: email,
     subject: `[${APP_NAME}] Redefinição de Senha`,
@@ -63,7 +73,7 @@ export async function sendApprovalEmail(
   const approveUrl = `${APP_URL}/approve/${approvalToken}?decision=approve`
   const rejectUrl = `${APP_URL}/approve/${approvalToken}?decision=reject`
 
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM,
     to: email,
     subject: `[${APP_NAME}] Aprovação Necessária: ${projectName}`,
