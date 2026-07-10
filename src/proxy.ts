@@ -11,7 +11,6 @@ const PUBLIC_PATHS = [
   "/reset-password",
   "/api/auth",
   "/api/approvals",
-  "/api/diagcheck",
   "/approve",
   "/_next",
   "/favicon",
@@ -32,9 +31,15 @@ export async function proxy(request: NextRequest) {
     }
 
     // Check JWT session token
+    // secureCookie must be explicit: getToken()'s protocol auto-detection is
+    // unreliable behind Vercel's proxy, so it was looking for the plain
+    // "authjs.session-token" cookie while the login response actually sets
+    // "__Secure-authjs.session-token" (HTTPS in production) — the mismatch
+    // made every session look logged-out here even right after a valid login.
     const token = await getToken({
       req: request,
       secret: process.env.AUTH_SECRET,
+      secureCookie: process.env.NODE_ENV === "production",
     })
 
     const isLoggedIn = !!token
